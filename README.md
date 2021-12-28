@@ -11,8 +11,15 @@ features in a way that is more integrated with Backdrop.
 I have also taken some code and inspiration from the Devel module as well as a
 project called Xhgui.
 
-https://www.drupal.org/project/webprofiler
-https://github.com/perftools/xhgui
+- https://www.drupal.org/project/webprofiler
+- https://github.com/perftools/xhgui
+
+Dependencies
+------------
+
+This module depends on the Xhprof PHP extension for function data.
+
+- https://pecl.php.net/package/xhprof
 
 License
 -------

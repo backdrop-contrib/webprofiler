@@ -122,6 +122,10 @@ function webprofiler_profile_functions_view($profile_id) {
 
   backdrop_set_title('Functions for ' .$profile->page['path']);
 
+  if (!isset($profile->functions) || empty($profile->functions)) {
+    return t('This profile has no function data to display. It was probably generated without the Xhprof PHP extension.');
+  }
+
   $output = array(
     '#theme' => 'table',
     '#header' => array(
@@ -307,96 +311,101 @@ function webprofiler_profile_function_view($profile_id, $function) {
   backdrop_set_title(check_plain($function_name . ' on ' . $profile->page['path']));
   $output = '';
 
-  if (isset($profile->functions[$function_name])) {
-    $stats = $profile->functions[$function_name];
+  if (isset($profile->functions) && !empty($profile->functions)) {
+    if (isset($profile->functions[$function_name])) {
+      $stats = $profile->functions[$function_name];
 
-    $table = array(
-      'header' => array(
-        t('Count'),
-        t('Exclusive Wall Time'),
-        t('Inclusive Wall Time'),
-        t('Exclusive CPU'),
-        t('Inclusive CPU'),
-        t('Exclusive Memory'),
-        t('Inclusive Memory'),
-        t('Peak Memory'),
-      ),
-      'rows' => array(array(
-        $stats['ct'],
-        $profile->formatTime($stats['ewt']),
-        $profile->formatTime($stats['wt']),
-        $profile->formatTime($stats['ecpu']),
-        $profile->formatTime($stats['cpu']),
-        $profile->formatMemory($stats['emu']),
-        $profile->formatMemory($stats['mu']),
-        $profile->formatMemory($stats['pmu']),
-      )),
-    );
-
-    $output .= theme('table', $table);
-  }
-
-  if (!empty($profile->functions[$function_name]['parents'])) {
-    $table = array(
-      'header' => array(
-        t('Function'),
-        t('Count'),
-        t('Exclusive Wall Time'),
-        t('Inclusive Wall Time'),
-        t('Exclusive CPU'),
-        t('Inclusive CPU'),
-        t('Exclusive Memory'),
-        t('Inclusive Memory'),
-        t('Peak Memory'),
-      ),
-      'rows' => array(),
-    );
-    foreach ($profile->functions[$function_name]['parents'] as $parent) {
-      $parent_stats = $profile->functions[$parent];
-
-      $table['rows'][] = array(
-        _webprofiler_function_link($profile_id, $parent),
-        $parent_stats['ct'],
-        $profile->formatTime($parent_stats['ewt']),
-        $profile->formatTime($parent_stats['wt']),
-        $profile->formatTime($parent_stats['ecpu']),
-        $profile->formatTime($parent_stats['cpu']),
-        $profile->formatMemory($parent_stats['emu']),
-        $profile->formatMemory($parent_stats['mu']),
-        $profile->formatMemory($parent_stats['pmu']),
+      $table = array(
+        'header' => array(
+          t('Count'),
+          t('Exclusive Wall Time'),
+          t('Inclusive Wall Time'),
+          t('Exclusive CPU'),
+          t('Inclusive CPU'),
+          t('Exclusive Memory'),
+          t('Inclusive Memory'),
+          t('Peak Memory'),
+        ),
+        'rows' => array(array(
+          $stats['ct'],
+          $profile->formatTime($stats['ewt']),
+          $profile->formatTime($stats['wt']),
+          $profile->formatTime($stats['ecpu']),
+          $profile->formatTime($stats['cpu']),
+          $profile->formatMemory($stats['emu']),
+          $profile->formatMemory($stats['mu']),
+          $profile->formatMemory($stats['pmu']),
+        )),
       );
+
+      $output .= theme('table', $table);
     }
 
-    $output .= '<h3>Parent functions</h3>';
-    $output .= theme('table', $table);
-  }
-
-  if (isset($profile->children[$function_name])) {
-    $table = array(
-      'header' => array(
-        t('Function'),
-        t('Count'),
-        t('Inclusive Wall Time'),
-        t('Inclusive CPU'),
-        t('Inclusive Memory'),
-        t('Peak Memory'),
-      ),
-      'rows' => array(),
-    );
-
-    foreach ($profile->children[$function_name] as $child_function => $child_stats) {
-      $table['rows'][] = array(
-        _webprofiler_function_link($profile_id, $child_function),
-        $child_stats['ct'],
-        $profile->formatTime($child_stats['wt']),
-        $profile->formatTime($child_stats['cpu']),
-        $profile->formatMemory($child_stats['mu']),
-        $profile->formatMemory($child_stats['pmu']),
+    if (!empty($profile->functions[$function_name]['parents'])) {
+      $table = array(
+        'header' => array(
+          t('Function'),
+          t('Count'),
+          t('Exclusive Wall Time'),
+          t('Inclusive Wall Time'),
+          t('Exclusive CPU'),
+          t('Inclusive CPU'),
+          t('Exclusive Memory'),
+          t('Inclusive Memory'),
+          t('Peak Memory'),
+        ),
+        'rows' => array(),
       );
+      foreach ($profile->functions[$function_name]['parents'] as $parent) {
+        $parent_stats = $profile->functions[$parent];
+
+        $table['rows'][] = array(
+          _webprofiler_function_link($profile_id, $parent),
+          $parent_stats['ct'],
+          $profile->formatTime($parent_stats['ewt']),
+          $profile->formatTime($parent_stats['wt']),
+          $profile->formatTime($parent_stats['ecpu']),
+          $profile->formatTime($parent_stats['cpu']),
+          $profile->formatMemory($parent_stats['emu']),
+          $profile->formatMemory($parent_stats['mu']),
+          $profile->formatMemory($parent_stats['pmu']),
+        );
+      }
+
+      $output .= '<h3>Parent functions</h3>';
+      $output .= theme('table', $table);
     }
 
-    $output .= '<h3>Child functions</h3>';
-    $output .= theme('table', $table);
+    if (isset($profile->children[$function_name])) {
+      $table = array(
+        'header' => array(
+          t('Function'),
+          t('Count'),
+          t('Inclusive Wall Time'),
+          t('Inclusive CPU'),
+          t('Inclusive Memory'),
+          t('Peak Memory'),
+        ),
+        'rows' => array(),
+      );
+
+      foreach ($profile->children[$function_name] as $child_function => $child_stats) {
+        $table['rows'][] = array(
+          _webprofiler_function_link($profile_id, $child_function),
+          $child_stats['ct'],
+          $profile->formatTime($child_stats['wt']),
+          $profile->formatTime($child_stats['cpu']),
+          $profile->formatMemory($child_stats['mu']),
+          $profile->formatMemory($child_stats['pmu']),
+        );
+      }
+
+      $output .= '<h3>Child functions</h3>';
+      $output .= theme('table', $table);
+    }
+  }
+  else {
+    $output .= t('This profile has no function data to display. It was probably generated without the Xhprof PHP extension.');
   }
 
   $queries = $profile->getQueriesByCaller($function_name);
