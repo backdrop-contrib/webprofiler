@@ -1,0 +1,9 @@
+{
+    "_config_name": "devel_perf.settings",
+    "collect_profiles": false,
+    "ignored_pages": "*webprofiler*",
+    "reverse_pages": false,
+    "ignored_roles": [],
+    "reverse_roles": false,
+    "ignored_functions": ""
+}

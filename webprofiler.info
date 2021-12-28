@@ -1,0 +1,7 @@
+name = Web Profiler
+description = Tracks performance data about your web pages and allows you to see what is going on in your website.
+package = Development
+backdrop = 1.x
+configure = admin/config/development/webprofiler
+tags[] = developer
+type = module

@@ -1,0 +1,274 @@
+<?php
+/**
+ * @file
+ * Tools for performance monitoring and optimization.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function webprofiler_menu() {
+  $items = array();
+
+  $items['admin/config/development/webprofiler'] = array(
+    'title' => t('Webprofiler settings'),
+    'description' => t('Configure performance monitoring features.'),
+    'page callback' => 'backdrop_get_form',
+    'page arguments' => array('webprofiler_settings_form'),
+    'file' => 'webprofiler.admin.inc',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  $items['admin/reports/webprofiler/profiles'] = array(
+    'title' => t('Webprofiler Profile List'),
+    'description' => t('Lists performance profiles collected by webprofiler.'),
+    'page callback' => 'webprofiler_list_profiles',
+    'file' => 'webprofiler.pages.inc',
+    'access arguments' => array('access webprofiler'),
+    'type' => MENU_NORMAL_ITEM
+  );
+
+  $items['admin/reports/webprofiler/profile/%'] = array(
+    'title' => t('Overview'),
+    'description' => t('Overview of performance profile.'),
+    'page callback' => 'webprofiler_profile_view',
+    'page arguments' => array(4),
+    'file' => 'webprofiler.pages.inc',
+    'access arguments' => array('access webprofiler'),
+  );
+  $items['admin/reports/webprofiler/profile/%/overview'] = array(
+    'title' => t('Overview'),
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => 1
+  );
+  $items['admin/reports/webprofiler/profile/%/functions'] = array(
+    'title' => t('Functions'),
+    'page callback' => 'webprofiler_profile_functions_view',
+    'page arguments' => array(4),
+    'file' => 'webprofiler.pages.inc',
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('access webprofiler'),
+    'weight' => 2
+  );
+  $items['admin/reports/webprofiler/profile/%/queries'] = array(
+    'title' => t('Queries'),
+    'page callback' => 'webprofiler_profile_queries_view',
+    'page arguments' => array(4),
+    'file' => 'webprofiler.pages.inc',
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('access webprofiler'),
+    'weight' => 3
+  );
+  $items['admin/reports/webprofiler/profile/%/function/%'] = array(
+    'title' => t('Functions'),
+    'page callback' => 'webprofiler_profile_function_view',
+    'page arguments' => array(4, 6),
+    'file' => 'webprofiler.pages.inc',
+    'type' => MENU_CALLBACK,
+    'access arguments' => array('access webprofiler'),
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_admin_paths().
+ */
+function webprofiler_admin_paths() {
+  return array(
+    'admin/reports/webprofiler/*',
+  );
+}
+
+/**
+ * Implements hook_autoload_info().
+ */
+function webprofiler_autoload_info() {
+  return array(
+    'WebprofilerProfile' => 'classes/webprofiler.WebprofilerProfile.inc',
+  );
+}
+
+/**
+ * Loads the profile data and returns an instance of WebprofilerProfile() with it.
+ *
+ * @param string $profile_id
+ *   The profile id to be loaded.
+ */
+function webprofiler_get_profile($profile_id) {
+  $json = file_get_contents('public://webprofiler_profiles/' . $profile_id);
+  if (empty($json)) {
+    backdrop_set_message('Failed to load profile data.', 'warning');
+    return FALSE;
+  }
+  $profile_data = json_decode($json, TRUE);
+
+  return new WebprofilerProfile($profile_data);
+}
+
+/**
+ * Implementation of hook_boot().
+ */
+function webprofiler_boot() {
+  $config = config('webprofiler.settings');
+  if ($config->get('collect_profiles')) {
+    // Get path from globals because we need it before path.inc is loaded.
+    $path = isset($_GET['q']) ? $_GET['q'] : '';
+    $ignored_pages = $config->get('ignored_pages');
+    $match = webprofiler_match_page($path, $ignored_pages);
+    $reverse = $config->get('reverse_pages');
+    if ($reverse ? $match : !$match) {
+      global $memory_init;
+      $memory_init = memory_get_usage();
+
+      // Register the shutdown function so that we can save the data.
+      backdrop_register_shutdown_function('webprofiler_shutdown');
+
+      // Start the query log.
+      include_once BACKDROP_ROOT . '/core/includes/database/log.inc';
+      Database::startLog('webprofiler');
+
+      // Check that xhprof exists so we don't call undefied functions.
+      if (function_exists('xhprof_enable')) {
+        $options = array();
+        $flags = XHPROF_FLAGS_CPU | XHPROF_FLAGS_MEMORY;
+
+        $functions = $config->get('ignored_functions');
+        if (!empty($functions)) {
+          $functions = preg_split("/\r\n|\n|\r/", $functions);
+          foreach ($functions as &$function) {
+            $function = trim($function);
+          }
+          $options['ignored_functions'] = $functions;
+        }
+
+        xhprof_enable($flags, $options);
+      }
+
+      // We need user_access() in the shutdown function. make sure it gets loaded.
+      // Also prime the backdrop_get_filename() static with user.module's location to
+      // avoid a stray query.
+      backdrop_get_filename('module', 'user', 'modules/user/user.module');
+      backdrop_load('module', 'user');
+    }
+  }
+}
+
+/**
+ * A shutdown function to handle saving the data for this request.
+ */
+function webprofiler_shutdown() {
+  $profile_data = webprofiler_collect_profile_data();
+
+  // Make sure that the class for the profile data is loaded.
+  include_once __DIR__ . '/classes/webprofiler.WebprofilerProfile.inc';
+  $profile = new WebprofilerProfile($profile_data);
+
+  webprofiler_save_profile_data($profile);
+}
+
+function webprofiler_collect_profile_data() {
+  global $memory_init;
+
+  $profile_data = [
+    'page' => [
+      'path' => request_uri(),
+      'timestamp' => REQUEST_TIME,
+      'time' => timer_read('page'),
+      'start_memory' => $memory_init,
+      'end_memory' => memory_get_usage(),
+      'peak_memory' => memory_get_peak_usage(TRUE),
+    ],
+  ];
+  $profile_data['queries'] = Database::getLog('webprofiler', 'default');
+  foreach ($profile_data['queries'] as &$query) {
+    unset($query['caller']['args']);
+  }
+  $profile_data['xhprof'] = function_exists('xhprof_disable') ? xhprof_disable() : NULL;
+
+  return $profile_data;
+}
+
+function webprofiler_save_profile_data(WebprofilerProfile $profile) {
+  // Check that the directory for traces exists and is writable.
+  $directory = file_stream_wrapper_uri_normalize('public://webprofiler_profiles');
+  $dir_ready = file_prepare_directory($directory, FILE_CREATE_DIRECTORY);
+  if (!$dir_ready) {
+    watchdog('warning', '!directory does not exist or is not writable.', array('!directory' => $directory));
+    return FALSE;
+  }
+
+  // Generate a random profile id and make sure it is not in use already.
+  $profile_id = '';
+  while (empty($profile_id)) {
+    $rand = str_shuffle(md5(microtime()));
+    $result = db_query('SELECT * FROM {webprofiler_profiles} WHERE id = :id', array(
+      ':id' => $rand,
+    ))->fetchAssoc();
+    if (empty($result)) {
+      $profile_id = $rand;
+    }
+  }
+
+  // Save the profile to a file.
+  $json = json_encode(array(
+    'page' => $profile->page,
+    'queries' => $profile->queries,
+    'xhprof' => $profile->xhprof,
+  ));
+  file_put_contents($directory . '/' . $profile_id, $json);
+  db_insert('webprofiler_profiles')->fields(array(
+    'id' => $profile_id,
+    'path' => $profile->page['path'],
+    'timestamp' => $profile->page['timestamp'],
+    'time' => $profile->page['time'],
+    'peak_memory' => $profile->page['peak_memory'],
+    'queries' => $profile->countQueries(),
+    'function_calls' => $profile->countFunctionCalls(),
+  ))->execute();
+}
+
+function _webprofiler_function_link($profile_id, $function) {
+  static $links = array();
+
+  if (!isset($links[$profile_id][$function])) {
+    $path = '/admin/reports/webprofiler/profile/' . $profile_id . '/function/' . $function;
+    $links[$profile_id][$function] = l($function, url($path));
+  }
+
+  return $links[$profile_id][$function];
+}
+
+/**
+ * Check if a path matches any pattern in a set of patterns.
+ *
+ * This is a direct copy of backdrop_match_path without the static cache since we
+ * don't need it. This is needed because we need our hook_boot to be able to
+ * operate before path.inc has been bootstrapped.
+ *
+ * @param string $path
+ *   The path to match.
+ * @param string $patterns
+ *   String containing a set of patterns separated by \n, \r or \r\n.
+ *
+ * @return
+ *   Boolean value: TRUE if the path matches a pattern, FALSE otherwise.
+ */
+function webprofiler_match_page($path, $patterns) {
+  // Convert path settings to a regular expression.
+  // Therefore replace newlines with a logical or, /* with asterisks and the <front> with the frontpage.
+  $to_replace = array(
+    '/(\r\n?|\n)/', // newlines
+    '/\\\\\*/',     // asterisks
+    '/(^|\|)\\\\<front\\\\>($|\|)/' // <front>
+  );
+  $replacements = array(
+    '|',
+    '.*',
+    '\1' . preg_quote(config_get('system.core', 'site_frontpage'), '/') . '\2'
+  );
+  $patterns_quoted = preg_quote($patterns, '/');
+  $regexp = '/^(' . preg_replace($to_replace, $replacements, $patterns_quoted) . ')$/';
+
+  return (bool) preg_match($regexp, $path);
+}
