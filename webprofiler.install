@@ -1,5 +1,27 @@
 <?php
 
+/**
+ * Implements hook_requirements.
+ */
+function webprofiler_requirements($phase) {
+  $requirements = array();
+
+  if ($phase === 'runtime') {
+    if (!function_exists('xhprof_enable')) {
+      $requirements['webprofiler_xhprof'] = array(
+        'title' => t('Webprofiler'),
+        'value' => t('The Xhprof extension is missing. Webprofiler will not be able to collect function data until the extension is installed. You can download Xhprof from <a href="https://pecl.php.net/package/xhprof">this page</a> if it is not already available for your platform.'),
+        'severity' => REQUIREMENT_WARNING,
+      );
+    }
+  }
+
+  return $requirements;
+}
+
+/**
+ * Implements hook_schema.
+ */
 function webprofiler_schema() {
   $schema['webprofiler_profiles'] = array(
     'description' => 'A table to store specific information about performance profiles so that they can be looked up more easily.',
@@ -57,6 +79,9 @@ function webprofiler_schema() {
   return $schema;
 }
 
+/**
+ * Implements hook_uninstall.
+ */
 function webprofiler_uninstall() {
   file_unmanaged_delete_recursive('public://webprofiler_profiles');
 }

@@ -5,5 +5,7 @@
     "reverse_pages": false,
     "ignored_roles": [],
     "reverse_roles": false,
-    "ignored_functions": ""
+    "ignored_functions": "",
+    "show_performance_toolbar": true,
+    "api_url": "docs.backdropcms.org"
 }

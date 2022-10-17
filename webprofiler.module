@@ -21,15 +21,20 @@ function webprofiler_menu() {
   );
 
   $items['admin/reports/webprofiler/profiles'] = array(
-    'title' => t('Webprofiler Profile List'),
+    'title' => t('Webprofiler Profiles'),
     'description' => t('Lists performance profiles collected by webprofiler.'),
-    'page callback' => 'webprofiler_list_profiles',
+    'page callback' => 'backdrop_get_form',
+    'page arguments' => array('webprofiler_list_profiles'),
     'file' => 'webprofiler.pages.inc',
     'access arguments' => array('access webprofiler'),
-    'type' => MENU_NORMAL_ITEM
+  );
+  $items['admin/reports/webprofiler/profiles/list'] = array(
+    'title' => t('Webprofiler Profile List'),
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => -10,
   );
 
-  $items['admin/reports/webprofiler/profile/%'] = array(
+  $items['admin/reports/webprofiler/profiles/%'] = array(
     'title' => t('Overview'),
     'description' => t('Overview of performance profile.'),
     'page callback' => 'webprofiler_profile_view',
@@ -37,12 +42,12 @@ function webprofiler_menu() {
     'file' => 'webprofiler.pages.inc',
     'access arguments' => array('access webprofiler'),
   );
-  $items['admin/reports/webprofiler/profile/%/overview'] = array(
+  $items['admin/reports/webprofiler/profiles/%/overview'] = array(
     'title' => t('Overview'),
     'type' => MENU_DEFAULT_LOCAL_TASK,
     'weight' => 1
   );
-  $items['admin/reports/webprofiler/profile/%/functions'] = array(
+  $items['admin/reports/webprofiler/profiles/%/functions'] = array(
     'title' => t('Functions'),
     'page callback' => 'webprofiler_profile_functions_view',
     'page arguments' => array(4),
@@ -51,7 +56,7 @@ function webprofiler_menu() {
     'access arguments' => array('access webprofiler'),
     'weight' => 2
   );
-  $items['admin/reports/webprofiler/profile/%/queries'] = array(
+  $items['admin/reports/webprofiler/profiles/%/queries'] = array(
     'title' => t('Queries'),
     'page callback' => 'webprofiler_profile_queries_view',
     'page arguments' => array(4),
@@ -60,12 +65,18 @@ function webprofiler_menu() {
     'access arguments' => array('access webprofiler'),
     'weight' => 3
   );
-  $items['admin/reports/webprofiler/profile/%/function/%'] = array(
+  $items['admin/reports/webprofiler/profiles/%/functions/%'] = array(
     'title' => t('Functions'),
     'page callback' => 'webprofiler_profile_function_view',
     'page arguments' => array(4, 6),
     'file' => 'webprofiler.pages.inc',
-    'type' => MENU_CALLBACK,
+    'access arguments' => array('access webprofiler'),
+  );
+  $items['admin/reports/webprofiler/profiles/delete/%'] = array(
+    'title' => t('Functions'),
+    'page callback' => 'webprofiler_profile_delete',
+    'page arguments' => array(4),
+    'file' => 'webprofiler.pages.inc',
     'access arguments' => array('access webprofiler'),
   );
   return $items;
@@ -86,6 +97,20 @@ function webprofiler_admin_paths() {
 function webprofiler_autoload_info() {
   return array(
     'WebprofilerProfile' => 'classes/webprofiler.WebprofilerProfile.inc',
+  );
+}
+
+/**
+ * Implements hook_permission().
+ */
+function webprofiler_permission() {
+  return array(
+    'access webprofiler' =>  array(
+      'title' => t('Access Webprofiler'),
+      'description' => t('Allows the user to view and manage profile data.'),
+      'restrict access' => TRUE,
+      'warning' => t('Allows people to perform actions that could lead to data loss.'),
+    ),
   );
 }
 
@@ -165,6 +190,11 @@ function webprofiler_shutdown() {
   $profile = new WebprofilerProfile($profile_data);
 
   webprofiler_save_profile_data($profile);
+
+  $config = config('webprofiler.settings');
+  if ($config->get('show_performance_toolbar')) {
+    webprofiler_display_toolbar($profile);
+  }
 }
 
 function webprofiler_collect_profile_data() {
@@ -228,15 +258,42 @@ function webprofiler_save_profile_data(WebprofilerProfile $profile) {
   ))->execute();
 }
 
+function webprofiler_display_toolbar($profile) {
+  
+}
+
 function _webprofiler_function_link($profile_id, $function) {
   static $links = array();
 
   if (!isset($links[$profile_id][$function])) {
-    $path = '/admin/reports/webprofiler/profile/' . $profile_id . '/function/' . $function;
+    $path = '/admin/reports/webprofiler/profiles/' . $profile_id . '/functions/' . $function;
     $links[$profile_id][$function] = l($function, url($path));
   }
 
   return $links[$profile_id][$function];
+}
+
+/**
+ * Creates a link to the backdrop documentation page for a function.
+ *
+ * @todo Find a way to get links to PHP docs as well.
+ * @param string $function The name of the function to get a link for.
+ * @return string A link to a documentation page
+ */
+function _webprofiler_documentaion_link($function) {
+//  dpm(get_defined_functions());
+//  dpm(get_defined_constants());
+//  dpm(get_declared_classes());
+  $api = config_get('webprofiler.settings', 'api_url');
+
+  $version_parts = explode('.', BACKDROP_VERSION);
+  $version = $version_parts[0];
+
+  $link = "https://$api/api/function/$function/$version";
+
+  return l(t('Documentation'), $link, array(
+    'attributes' => array('class' => array('button')),
+  ));
 }
 
 /**

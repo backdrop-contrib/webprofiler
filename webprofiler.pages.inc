@@ -1,60 +1,132 @@
 <?php
 
-function webprofiler_list_profiles() {
+function webprofiler_list_profiles($form, &$form_state) {
+  $params = backdrop_get_query_parameters();
+
+  $path = '';
+  if (isset($params['path']) && !empty($params['path'])) {
+    $path = $params['path'];
+  }
+
+  $form['filter'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Filter'),
+    '#collapsible' => TRUE,
+  );
+
+  $form['filter']['path'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Path'),
+    '#size' => 30,
+    '#default_value' => $path,
+  );
+  $form['filter']['search'] = array(
+    '#type' => 'submit',
+    '#value' => t('Search'),
+    '#submit' => array('webprofiler_list_profiles_form_search_submit'),
+  );
+  $form['filter']['reset'] = array(
+    '#type' => 'submit',
+    '#value' => t('Reset'),
+    '#submit' => array('webprofiler_list_profiles_form_reset_submit'),
+  );
+
+//  $form['actions'] = array(
+//    '#type' => 'fieldset',
+//    '#title' => t('Actions'),
+//  );
+//  $form['actions'] = array(
+//    '#type' => 'submit',
+//    '#value' => t('Reset'),
+//  );
+//  $output .= l(t('Delete all'), url(), array('attributes' => array('class' => '')));
+
+  // Format the table.
   $table = array(
     'header' => array(
+      '',
       array(
-        'data' => 'Path',
+        'data' => t('Path'),
         'field' => 'path',
       ),
       array(
-        'data' => 'Date',
+        'data' => t('Date'),
         'field' => 'timestamp',
         'sort' => 'desc',
       ),
       array(
-        'data' => 'Execution Time',
+        'data' => t('Execution Time'),
         'field' => 'time',
       ),
       array(
-        'data' => 'Peak Memory',
+        'data' => t('Peak Memory'),
         'field' => 'peak_memory',
       ),
       array(
-        'data' => 'Queries',
+        'data' => t('Queries'),
         'field' => 'queries',
       ),
       array(
-        'data' => 'Function Calls',
+        'data' => t('Function Calls'),
         'field' => 'function_calls',
+      ),
+      array(
+        'data' => t('Actions'),
       ),
     ),
     'rows' => array(),
   );
 
-  $query = db_select('webprofiler_profiles', 'dpp')
+  $query = db_select('webprofiler_profiles', 'wpp')
     ->extend('PagerDefault')
     ->extend('TableSort')
-    ->fields('dpp')
+    ->fields('wpp')
     ->limit(50)
     ->orderByHeader($table['header']);
 
+  if (!empty($path)) {
+    $query->condition('wpp.path', '%' . db_like($path) . '%', 'LIKE');
+  }
+
   $results = $query->execute();
+
+
   foreach ($results as $row) {
     $table['rows'][] = array(
-      l($row->path, url('admin/reports/webprofiler/profile/' . $row->id)),
+      '',
+      l($row->path, url('admin/reports/webprofiler/profiles/' . $row->id)),
       format_date($row->timestamp, 'short'),
       $row->time . ' ms',
       WebprofilerProfile::formatMemory($row->peak_memory),
       $row->queries,
       $row->function_calls,
+      l(t('Delete'), url('admin/reports/webprofiler/profiles/delete/' . $row->id)),
     );
   }
 
-  $output = theme('table', $table);
-  $output .= theme('pager');
+  $form['table'] = array(
+    '#markup' => theme('table', $table),
+  );
 
-  return $output;
+  $form['pager'] = array(
+    '#markup' => theme('pager')
+  );
+
+  return $form;
+}
+
+function webprofiler_list_profiles_form_search_submit($form, &$form_state) {
+  $params = backdrop_get_query_parameters();
+  if (isset($form_state['values']['path']) && !empty($form_state['values']['path'])) {
+    $path = urlencode($form_state['values']['path']);
+    $params['path'] = $path;
+  }
+
+  backdrop_goto('admin/reports/webprofiler/profiles', array('query' => $params));
+}
+
+function webprofiler_list_profiles_form_reset_submit($form, &$form_state) {
+  backdrop_goto('admin/reports/webprofiler/profiles');
 }
 
 function webprofiler_profile_view($profile_id) {
@@ -120,6 +192,9 @@ function webprofiler_profile_functions_view($profile_id) {
     return FALSE;
   }
 
+  backdrop_add_js(backdrop_get_path('module', 'webprofiler') . '/js/webprofiler.admin.js');
+  backdrop_add_css(backdrop_get_path('module', 'webprofiler') . '/css/webprofiler.admin.css');
+
   backdrop_set_title('Functions for ' .$profile->page['path']);
 
   if (!isset($profile->functions) || empty($profile->functions)) {
@@ -164,7 +239,12 @@ function webprofiler_profile_functions_view($profile_id) {
         'field' => 'pmu',
       ),
     ),
-    '#rows' => array(),
+    '#rows' => [],
+    '#prefix' => '<div class="form-item form-type-textfield form-item-path">
+      <label for="function-search">Search</label>
+      <input type="text" id="function-search" name="function-search" value="" class="form-text">
+      </div>',
+    '#attributes' => ['id' => 'function-table'],
   );
 
   $sort = tablesort_get_order($output['#header']);
@@ -185,21 +265,30 @@ function webprofiler_profile_functions_view($profile_id) {
 
   foreach ($profile->functions as $function_name => $stats) {
     $output['#rows'][] = [
-      _webprofiler_function_link($profile_id, $function_name),
-      $stats['ct'],
-      $profile->formatTime($stats['ewt']),
-      $profile->formatTime($stats['wt']),
-      $profile->formatTime($stats['ecpu']),
-      $profile->formatTime($stats['cpu']),
-      $profile->formatMemory($stats['emu']),
-      $profile->formatMemory($stats['mu']),
-      $profile->formatMemory($stats['pmu']),
+      'data' => [
+        _webprofiler_function_link($profile_id, $function_name),
+        $stats['ct'],
+        $profile->formatTime($stats['ewt']),
+        $profile->formatTime($stats['wt']),
+        $profile->formatTime($stats['ecpu']),
+        $profile->formatTime($stats['cpu']),
+        $profile->formatMemory($stats['emu']),
+        $profile->formatMemory($stats['mu']),
+        $profile->formatMemory($stats['pmu']),
+      ],
+      'data-function' => $function_name,
     ];
   }
 
   return $output;
 }
 
+/**
+ * The menu callback for viewing a list of queries from a profile.
+ *
+ * @param string $profile_id
+ * @return bool|array
+ */
 function webprofiler_profile_queries_view($profile_id) {
   $profile = webprofiler_get_profile($profile_id);
   if (!$profile) {
@@ -310,6 +399,8 @@ function webprofiler_profile_function_view($profile_id, $function) {
   $profile = webprofiler_get_profile($profile_id);
   backdrop_set_title(check_plain($function_name . ' on ' . $profile->page['path']));
   $output = '';
+
+  $output = _webprofiler_documentaion_link($function_name);
 
   if (isset($profile->functions) && !empty($profile->functions)) {
     if (isset($profile->functions[$function_name])) {
@@ -451,4 +542,18 @@ function webprofiler_profile_function_view($profile_id, $function) {
   }
 
   return $output;
+}
+
+function webprofiler_profile_delete($profile_id) {
+  db_delete('webprofiler_profiles')
+    ->condition('id', $profile_id)
+    ->execute();
+
+  $filename = 'public://webprofiler_profiles/' . $profile_id;
+  if (file_exists($filename)) {
+    unlink($filename);
+  }
+
+  // @TODO: fix redirecting after deleting a profile.
+//  backdrop_goto();
 }
