@@ -19,6 +19,15 @@ function webprofiler_menu() {
     'access arguments' => array('administer site configuration'),
     'type' => MENU_NORMAL_ITEM,
   );
+  $items['admin/config/development/webprofiler/clear_data'] = array(
+    'title' => t('Clear all profile data'),
+    'description' => t('Removes all profile data from the database and the filesystem'),
+    'page callback' => 'backdrop_get_form',
+    'page arguments' => array('webprofiler_clear_data_form'),
+    'file' => 'webprofiler.admin.inc',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_NORMAL_ITEM,
+  );
 
   $items['admin/reports/webprofiler/profiles'] = array(
     'title' => t('Webprofiler Profiles'),
@@ -75,7 +84,7 @@ function webprofiler_menu() {
   $items['admin/reports/webprofiler/profiles/delete/%'] = array(
     'title' => t('Functions'),
     'page callback' => 'webprofiler_profile_delete',
-    'page arguments' => array(4),
+    'page arguments' => array(5),
     'file' => 'webprofiler.pages.inc',
     'access arguments' => array('access webprofiler'),
   );
@@ -146,9 +155,6 @@ function webprofiler_boot() {
       global $memory_init;
       $memory_init = memory_get_usage();
 
-      // Register the shutdown function so that we can save the data.
-      backdrop_register_shutdown_function('webprofiler_shutdown');
-
       // Start the query log.
       include_once BACKDROP_ROOT . '/core/includes/database/log.inc';
       Database::startLog('webprofiler');
@@ -179,22 +185,49 @@ function webprofiler_boot() {
   }
 }
 
+function webprofiler_preprocess_layout($variables) {
+  $config = config('webprofiler.settings');
+  if ($config->get('collect_profiles') && $config->get('show_toolbar') && !webprofiler_silent()) {
+    backdrop_add_css(backdrop_get_path('module', 'webprofiler'). '/css/webprofiler.toolbar.css');
+  }
+}
+
 /**
  * A shutdown function to handle saving the data for this request.
  */
-function webprofiler_shutdown() {
-  $profile_data = webprofiler_collect_profile_data();
-
-  // Make sure that the class for the profile data is loaded.
-  include_once __DIR__ . '/classes/webprofiler.WebprofilerProfile.inc';
-  $profile = new WebprofilerProfile($profile_data);
-
-  webprofiler_save_profile_data($profile);
-
+function webprofiler_exit() {
   $config = config('webprofiler.settings');
-  if ($config->get('show_performance_toolbar')) {
-    webprofiler_display_toolbar($profile);
+  if ($config->get('collect_profiles')) {
+    $profile_data = webprofiler_collect_profile_data();
+    if (!empty($profile_data['xhprof'])) {
+      $profile = new WebprofilerProfile($profile_data);
+
+      webprofiler_save_profile_data($profile);
+
+      if ($config->get('show_toolbar') && !webprofiler_silent()) {
+        webprofiler_display_toolbar($profile);
+      }
+    }
   }
+}
+
+/**
+ * Stores a profile and returns it when called later.
+ *
+ * This allows interacting with the profile to store data during the page load.
+ *
+ * @staticvar WebprofilerProfile|NULL $stored_profile
+ * @param WebprofilerProfile|NULL $profile
+ * @return WebprofilerProfile|NULL
+ */
+function webprofiler_current_profile($profile = NULL) {
+  static $stored_profile;
+
+  if ($profile !== NULL) {
+    $stored_profile = $profile;
+  }
+
+  return $stored_profile;
 }
 
 function webprofiler_collect_profile_data() {
@@ -240,15 +273,18 @@ function webprofiler_save_profile_data(WebprofilerProfile $profile) {
     }
   }
 
+  $profile->id = $profile_id;
+
   // Save the profile to a file.
   $json = json_encode(array(
+    'id' => $profile->id,
     'page' => $profile->page,
     'queries' => $profile->queries,
     'xhprof' => $profile->xhprof,
   ));
-  file_put_contents($directory . '/' . $profile_id, $json);
+  file_put_contents($directory . '/' . $profile->id, $json);
   db_insert('webprofiler_profiles')->fields(array(
-    'id' => $profile_id,
+    'id' => $profile->id,
     'path' => $profile->page['path'],
     'timestamp' => $profile->page['timestamp'],
     'time' => $profile->page['time'],
@@ -258,8 +294,41 @@ function webprofiler_save_profile_data(WebprofilerProfile $profile) {
   ))->execute();
 }
 
-function webprofiler_display_toolbar($profile) {
-  
+/**
+ * A helper function to stop the toolbar from being shown in certain cases.
+ *
+ * This function was copied from the Devel module.
+ */
+function webprofiler_silent() {
+  return
+    function_exists('backdrop_is_cli') && backdrop_is_cli() ||
+    function_exists('backdrop_is_html') && !backdrop_is_html() ||
+    (isset($_SERVER['HTTP_USER_AGENT']) && strpos($_SERVER['HTTP_USER_AGENT'], 'ApacheBench') !== FALSE) ||
+    !empty($_REQUEST['XDEBUG_PROFILE']) ||
+    strstr($_SERVER['PHP_SELF'], 'update.php') ||
+    (isset($_GET['q']) && (
+      in_array($_GET['q'], array( 'admin/content/node-settings/rebuild')) ||
+      substr($_GET['q'], 0, strlen('system/files')) == 'system/files' ||
+      substr($_GET['q'], 0, strlen('batch')) == 'batch' ||
+      substr($_GET['q'], 0, strlen('file/ajax')) == 'file/ajax')
+    );
+}
+
+/**
+ * Formats profile data for displaying in the toolbar.
+ */
+function webprofiler_display_toolbar(WebprofilerProfile $profile) {
+  $output = '';
+
+  $output .= '<div> <a href="/admin/reports/webprofiler/profiles/' . $profile->id .'">' . $profile->page['path'] .'</a></div>';
+  $output .= '<div>Load time: ' . $profile->getPageTime() .'</div>';
+  $output .= '<div>Peak Memory: ' . $profile->formatMemory($profile->page['peak_memory']) .'</div>';
+  $output .= '<div>Functions: ' . $profile->countFunctionCalls() .'</div>';
+  $output .= '<div>Database: ' . $profile->getTotalQueryTime() . ', ' .$profile->countQueries() .' queries</div>';
+
+  if (!empty($output)) {
+    print '<div id="webprofiler-toolbar">' . $output . '</div>';
+  }
 }
 
 function _webprofiler_function_link($profile_id, $function) {
@@ -281,19 +350,39 @@ function _webprofiler_function_link($profile_id, $function) {
  * @return string A link to a documentation page
  */
 function _webprofiler_documentaion_link($function) {
-//  dpm(get_defined_functions());
-//  dpm(get_defined_constants());
-//  dpm(get_declared_classes());
-  $api = config_get('webprofiler.settings', 'api_url');
+  static $defined_functions = [];
+  if (empty($defined_functions)) {
+    $defined_functions = get_defined_functions();
+  }
 
-  $version_parts = explode('.', BACKDROP_VERSION);
-  $version = $version_parts[0];
+  // Block certain functions that aren't actually PHP functions.
+  if (in_array($function, array(
+    'main()',
+    '__top__',
+  ))) {
+    return;
+  }
 
-  $link = "https://$api/api/function/$function/$version";
+  if (in_array($function, $defined_functions['internal'])) {
+    // This function is a PHP built-in.
+    $link = 'https://www.php.net/manual/en/function.' . str_replace('_', '-', $function) . '.php';
+  }
+  else {
+    // This is a user function, so create a link to the Backdrop docs site.
+    $api = config_get('webprofiler.settings', 'api_url');
 
-  return l(t('Documentation'), $link, array(
-    'attributes' => array('class' => array('button')),
-  ));
+    $version_parts = explode('.', BACKDROP_VERSION);
+    $version = $version_parts[0];
+
+    $link = "https://$api/api/function/$function/$version";
+
+  }
+
+  if (isset($link) && !empty($link)) {
+    return l(t('Documentation'), $link, array(
+      'attributes' => array('class' => array('button')),
+    ));
+  }
 }
 
 /**

@@ -1,0 +1,18 @@
+#webprofiler-toolbar {
+  width: 100%;
+  display: flex;
+  background-color: #ccc;
+  border-top: 1px solid #888;
+  position: fixed;
+  bottom: 0;
+  z-index: 100;
+}
+
+#webprofiler-toolbar div {
+  padding: .25rem;
+  border-left: 1px solid #aaa;
+}
+
+#webprofiler-toolbar div:first-of-type {
+  border: none;
+}

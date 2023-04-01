@@ -386,7 +386,7 @@ function webprofiler_profile_queries_view($profile_id) {
     $row[] = $counts[$query['query']];
     $row[] = _webprofiler_function_link($profile_id, $function_name);
     $row[] = $query['query'];
-    $row[] = WebprofilerProfile::formatTime(round($query['time'] * 1000000));
+    $row[] = WebprofilerProfile::formatQueryTime($query['time']);
     $row[] = $query['target'];
     $output['#rows'][] = $row;
   }
@@ -531,7 +531,7 @@ function webprofiler_profile_function_view($profile_id, $function) {
     foreach ($queries as $query) {
       $table['rows'][] = array(
         $counts[$query['query']],
-        WebprofilerProfile::formatTime(round($query['time'] * 1000000)),
+        WebprofilerProfile::formatQueryTime($query['time']),
         $query['query'],
         $query['target'],
       );
@@ -555,5 +555,5 @@ function webprofiler_profile_delete($profile_id) {
   }
 
   // @TODO: fix redirecting after deleting a profile.
-//  backdrop_goto();
+  backdrop_goto('admin/reports/webprofiler/profiles');
 }

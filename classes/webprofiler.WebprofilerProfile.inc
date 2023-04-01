@@ -1,6 +1,7 @@
 <?php
 
 class WebprofilerProfile {
+  public $id = '';
 
   public $page = array();
 
@@ -19,6 +20,9 @@ class WebprofilerProfile {
   public $children = array();
 
   function __construct($profile) {
+    if (isset($profile['id'])) {
+      $this->id = $profile['id'];
+    }
     if (isset($profile['page'])) {
       $this->page = $profile['page'];
     }
@@ -135,13 +139,32 @@ class WebprofilerProfile {
     return 0;
   }
 
+  public function getTotalQueryTime() {
+    $time = 0;
+
+    foreach ($this->queries as $query) {
+      $time += $query['time'];
+    }
+
+    return $this->formatQueryTime($time);
+  }
+
+  /**
+   * Formats amounts of microseconds so they are easier to read.
+   *
+   * @param int $time An integer representing a number of microseconds.
+   */
+  public static function formatQueryTime($time) {
+    return number_format($time*1000000, 0) . ' µs';
+  }
+
   /**
    * Formats amounts of microseconds so they are easier to read.
    *
    * @param int $time An integer representing a number of microseconds.
    */
   public static function formatTime($time) {
-    return number_format($time) . ' µs';
+    return number_format($time, 2) . ' µs';
   }
 
   /**
