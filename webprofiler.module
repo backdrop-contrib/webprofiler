@@ -244,8 +244,10 @@ function webprofiler_collect_profile_data() {
     ],
   ];
   $profile_data['queries'] = Database::getLog('webprofiler', 'default');
-  foreach ($profile_data['queries'] as &$query) {
-    unset($query['caller']['args']);
+  if (!empty($profile_data['queries'])) {
+    foreach ($profile_data['queries'] as &$query) {
+      unset($query['caller']['args']);
+    }
   }
   $profile_data['xhprof'] = function_exists('xhprof_disable') ? xhprof_disable() : NULL;
 
