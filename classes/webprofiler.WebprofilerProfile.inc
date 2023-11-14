@@ -1,5 +1,8 @@
 <?php
 
+/**
+ * A class that contains data related to a given page profile.
+ */
 class WebprofilerProfile {
   public $id = '';
 
@@ -19,7 +22,10 @@ class WebprofilerProfile {
    */
   public $children = array();
 
-  function __construct($profile) {
+  /**
+   * Sets up the profile data.
+   */
+  public function __construct($profile) {
     if (isset($profile['id'])) {
       $this->id = $profile['id'];
     }
@@ -36,6 +42,9 @@ class WebprofilerProfile {
     $this->process();
   }
 
+  /**
+   * Takes the Xhprof data and processes it to be easier for reporting to users.
+   */
   public function process() {
     foreach ($this->xhprof as $name => $stats) {
       list($parent, $function) = $this->splitXhprofName($name);
@@ -75,6 +84,9 @@ class WebprofilerProfile {
     }
   }
 
+  /**
+   * Splits an Xhprof function name into parts to be used by the profile.
+   */
   public function splitXhprofName($name) {
     $parts = explode('==>', $name);
     if (isset($parts[1])) {
@@ -83,6 +95,9 @@ class WebprofilerProfile {
     return [ '__top__', $parts[0]];
   }
 
+  /**
+   * Gets the default values for function metrics.
+   */
   protected function _getFunctionDefaults() {
     return [
       'ct' => 0,
@@ -97,6 +112,9 @@ class WebprofilerProfile {
     ];
   }
 
+  /**
+   * Gets the total number of function calls in the profile.
+   */
   public function countFunctionCalls() {
     $count = 0;
 
@@ -107,10 +125,16 @@ class WebprofilerProfile {
     return $count;
   }
 
+  /**
+   * Gets the total number of queries in the profile.
+   */
   public function countQueries() {
     return count($this->queries);
   }
 
+  /**
+   * Gets a list of queries called by a particular function.
+   */
   public function getQueriesByCaller($function) {
     $results = array();
 
@@ -129,6 +153,9 @@ class WebprofilerProfile {
     return $results;
   }
 
+  /**
+   * Gets the total page load time formatted as ms.
+   */
   public function getPageTime() {
     if (isset($this->page['time'])) {
       if ($this->page['time'] > 1000) {
@@ -139,6 +166,9 @@ class WebprofilerProfile {
     return 0;
   }
 
+  /**
+   * Gets the total query time for all queries in the profile.
+   */
   public function getTotalQueryTime() {
     $time = 0;
 
@@ -152,16 +182,18 @@ class WebprofilerProfile {
   /**
    * Formats amounts of microseconds so they are easier to read.
    *
-   * @param int $time An integer representing a number of microseconds.
+   * @param int $time
+   *   An integer representing a number of microseconds.
    */
   public static function formatQueryTime($time) {
-    return number_format($time*1000000, 0) . ' µs';
+    return number_format($time * 1000000, 0) . ' µs';
   }
 
   /**
    * Formats amounts of microseconds so they are easier to read.
    *
-   * @param int $time An integer representing a number of microseconds.
+   * @param int $time
+   *   An integer representing a number of microseconds.
    */
   public static function formatTime($time) {
     return number_format($time, 2) . ' µs';
@@ -170,7 +202,8 @@ class WebprofilerProfile {
   /**
    * Formats memory amounts so they are easier to read.
    *
-   * @param int $memory An integer representing an amount of bytes of memory.
+   * @param int $memory
+   *   An integer representing an amount of bytes of memory.
    */
   public static function formatMemory($memory) {
     $suffix = '';

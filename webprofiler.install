@@ -1,7 +1,10 @@
 <?php
+/**
+ * @file Contains hooks related to the installing and uninstalling the module.
+ */
 
 /**
- * Implements hook_requirements.
+ * Implements hook_requirements().
  */
 function webprofiler_requirements($phase) {
   $requirements = array();
@@ -20,7 +23,7 @@ function webprofiler_requirements($phase) {
 }
 
 /**
- * Implements hook_schema.
+ * Implements hook_schema().
  */
 function webprofiler_schema() {
   $schema['webprofiler_profiles'] = array(
@@ -80,7 +83,7 @@ function webprofiler_schema() {
 }
 
 /**
- * Implements hook_uninstall.
+ * Implements hook_uninstall().
  */
 function webprofiler_uninstall() {
   file_unmanaged_delete_recursive('public://webprofiler_profiles');

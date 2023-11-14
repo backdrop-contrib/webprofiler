@@ -54,7 +54,7 @@ function webprofiler_menu() {
   $items['admin/reports/webprofiler/profiles/%/overview'] = array(
     'title' => t('Overview'),
     'type' => MENU_DEFAULT_LOCAL_TASK,
-    'weight' => 1
+    'weight' => 1,
   );
   $items['admin/reports/webprofiler/profiles/%/functions'] = array(
     'title' => t('Functions'),
@@ -63,7 +63,7 @@ function webprofiler_menu() {
     'file' => 'webprofiler.pages.inc',
     'type' => MENU_LOCAL_TASK,
     'access arguments' => array('access webprofiler'),
-    'weight' => 2
+    'weight' => 2,
   );
   $items['admin/reports/webprofiler/profiles/%/queries'] = array(
     'title' => t('Queries'),
@@ -72,7 +72,7 @@ function webprofiler_menu() {
     'file' => 'webprofiler.pages.inc',
     'type' => MENU_LOCAL_TASK,
     'access arguments' => array('access webprofiler'),
-    'weight' => 3
+    'weight' => 3,
   );
   $items['admin/reports/webprofiler/profiles/%/functions/%'] = array(
     'title' => t('Functions'),
@@ -125,7 +125,7 @@ function webprofiler_autoload_info() {
  */
 function webprofiler_permission() {
   return array(
-    'access webprofiler' =>  array(
+    'access webprofiler' => array(
       'title' => t('Access Webprofiler'),
       'description' => t('Allows the user to view and manage profile data.'),
       'restrict access' => TRUE,
@@ -135,7 +135,7 @@ function webprofiler_permission() {
 }
 
 /**
- * Loads the profile data and returns an instance of WebprofilerProfile() with it.
+ * Loads the profile data and returns an instance of WebprofilerProfile().
  *
  * @param string $profile_id
  *   The profile id to be loaded.
@@ -152,7 +152,7 @@ function webprofiler_get_profile($profile_id) {
 }
 
 /**
- * Implementation of hook_boot().
+ * Implements hook_boot().
  */
 function webprofiler_boot() {
   $config = config('webprofiler.settings');
@@ -163,6 +163,12 @@ function webprofiler_boot() {
     $match = webprofiler_match_page($path, $ignored_pages);
     $reverse = $config->get('reverse_pages');
     if ($reverse ? $match : !$match) {
+      // We need to make sure user_access() is loaded in the shutdown function.
+      // Also prime the backdrop_get_filename() static with user.module's
+      // location to avoid a stray query.
+      backdrop_get_filename('module', 'user', 'modules/user/user.module');
+      backdrop_load('module', 'user');
+
       global $memory_init;
       $memory_init = memory_get_usage();
 
@@ -187,15 +193,13 @@ function webprofiler_boot() {
         xhprof_enable($flags, $options);
       }
 
-      // We need user_access() in the shutdown function. make sure it gets loaded.
-      // Also prime the backdrop_get_filename() static with user.module's location to
-      // avoid a stray query.
-      backdrop_get_filename('module', 'user', 'modules/user/user.module');
-      backdrop_load('module', 'user');
     }
   }
 }
 
+/**
+ * Adds the CSS for the toolbar to the current page.
+ */
 function webprofiler_preprocess_layout($variables) {
   $config = config('webprofiler.settings');
   if ($config->get('collect_profiles') && $config->get('show_toolbar') && !webprofiler_silent()) {
@@ -229,6 +233,8 @@ function webprofiler_exit() {
  *
  * @staticvar WebprofilerProfile|NULL $stored_profile
  * @param WebprofilerProfile|NULL $profile
+ *   A profile to store for the current page or NULL to get an existing profile.
+ *
  * @return WebprofilerProfile|NULL
  */
 function webprofiler_current_profile($profile = NULL) {
@@ -241,6 +247,9 @@ function webprofiler_current_profile($profile = NULL) {
   return $stored_profile;
 }
 
+/**
+ * Creates an array of data to be stored as a profile for viewing later.
+ */
 function webprofiler_collect_profile_data() {
   global $memory_init;
 
@@ -265,6 +274,9 @@ function webprofiler_collect_profile_data() {
   return $profile_data;
 }
 
+/**
+ * Saves the data for a profile.
+ */
 function webprofiler_save_profile_data(WebprofilerProfile $profile) {
   // Check that the directory for traces exists and is writable.
   $directory = file_stream_wrapper_uri_normalize('public://webprofiler_profiles');
@@ -313,18 +325,16 @@ function webprofiler_save_profile_data(WebprofilerProfile $profile) {
  * This function was copied from the Devel module.
  */
 function webprofiler_silent() {
-  return
-    function_exists('backdrop_is_cli') && backdrop_is_cli() ||
+  return function_exists('backdrop_is_cli') && backdrop_is_cli() ||
     function_exists('backdrop_is_html') && !backdrop_is_html() ||
     (isset($_SERVER['HTTP_USER_AGENT']) && strpos($_SERVER['HTTP_USER_AGENT'], 'ApacheBench') !== FALSE) ||
     !empty($_REQUEST['XDEBUG_PROFILE']) ||
     strstr($_SERVER['PHP_SELF'], 'update.php') ||
-    (isset($_GET['q']) && (
-      in_array($_GET['q'], array( 'admin/content/node-settings/rebuild')) ||
-      substr($_GET['q'], 0, strlen('system/files')) == 'system/files' ||
-      substr($_GET['q'], 0, strlen('batch')) == 'batch' ||
-      substr($_GET['q'], 0, strlen('file/ajax')) == 'file/ajax')
-    );
+    (isset($_GET['q']) &&
+    (in_array($_GET['q'], array( 'admin/content/node-settings/rebuild')) ||
+    substr($_GET['q'], 0, strlen('system/files')) == 'system/files' ||
+    substr($_GET['q'], 0, strlen('batch')) == 'batch' ||
+    substr($_GET['q'], 0, strlen('file/ajax')) == 'file/ajax'));
 }
 
 /**
@@ -344,6 +354,9 @@ function webprofiler_display_toolbar(WebprofilerProfile $profile) {
   }
 }
 
+/**
+ * Creates a link to view a given function for a given profile.
+ */
 function _webprofiler_function_link($profile_id, $function) {
   static $links = array();
 
@@ -359,7 +372,8 @@ function _webprofiler_function_link($profile_id, $function) {
  * Creates a link to the backdrop documentation page for a function.
  *
  * @todo Find a way to get links to PHP docs as well.
- * @param string $function The name of the function to get a link for.
+ * @param string $function
+ *   The name of the function to get a link for.
  * @return string A link to a documentation page
  */
 function _webprofiler_documentaion_link($function) {
@@ -401,8 +415,8 @@ function _webprofiler_documentaion_link($function) {
 /**
  * Check if a path matches any pattern in a set of patterns.
  *
- * This is a direct copy of backdrop_match_path without the static cache since we
- * don't need it. This is needed because we need our hook_boot to be able to
+ * This is a direct copy of backdrop_match_path without the static cache since
+ * we don't need it. This is needed because we need our hook_boot to be able to
  * operate before path.inc has been bootstrapped.
  *
  * @param string $path
@@ -410,21 +424,24 @@ function _webprofiler_documentaion_link($function) {
  * @param string $patterns
  *   String containing a set of patterns separated by \n, \r or \r\n.
  *
- * @return
- *   Boolean value: TRUE if the path matches a pattern, FALSE otherwise.
+ * @return Boolean TRUE if the path matches a pattern, FALSE otherwise.
  */
 function webprofiler_match_page($path, $patterns) {
   // Convert path settings to a regular expression.
-  // Therefore replace newlines with a logical or, /* with asterisks and the <front> with the frontpage.
+  // Therefore replace newlines with a logical or, /* with asterisks and
+  // the <front> with the frontpage.
   $to_replace = array(
-    '/(\r\n?|\n)/', // newlines
-    '/\\\\\*/',     // asterisks
-    '/(^|\|)\\\\<front\\\\>($|\|)/' // <front>
+    // Newlines.
+    '/(\r\n?|\n)/',
+    // Asterisks.
+    '/\\\\\*/',
+    // <front>
+    '/(^|\|)\\\\<front\\\\>($|\|)/',
   );
   $replacements = array(
     '|',
     '.*',
-    '\1' . preg_quote(config_get('system.core', 'site_frontpage'), '/') . '\2'
+    '\1' . preg_quote(config_get('system.core', 'site_frontpage'), '/') . '\2',
   );
   $patterns_quoted = preg_quote($patterns, '/');
   $regexp = '/^(' . preg_replace($to_replace, $replacements, $patterns_quoted) . ')$/';

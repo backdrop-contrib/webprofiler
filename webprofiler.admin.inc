@@ -1,4 +1,7 @@
 <?php
+/**
+ * @file Contains admin pages for managing the Webprofiler module and its data.
+ */
 
 /**
  * Form for Webprofiler settings.
@@ -32,29 +35,8 @@ function webprofiler_settings_form($form, &$form_state) {
     '#type' => 'checkbox',
     '#title' => t('Reverse pages'),
     '#default_value' => $config->get('reverse_pages'),
-    '#description' => t('Reverses the effect of the Ignored Pages setting so it will only collect profiles for matched pages.')
+    '#description' => t('Reverses the effect of the Ignored Pages setting so it will only collect profiles for matched pages.'),
   );
-//  $form['data_collection']['roles'] = array(
-//    '#type' => 'textarea',
-//    '#title' => t('Roles'),
-//    '#default_value' => $config->get('roles'),
-//  );
-//  $form['data_collection']['reverse_roles'] = array(
-//    '#type' => 'checkbox',
-//    '#title' => t('Reverse roles'),
-//    '#default_value' => $config->get('reverse_roles'),
-//  );
-
-//  $form['ignored_functions'] = array(
-//    '#type' => 'fieldset',
-//    '#title' => t('Ignored functions'),
-//  );
-//  $form['ignored_functions']['ignored_functions'] = array(
-//    '#type' => 'textarea',
-//    '#title' => t('Functions to be ignored by Xhprof when generating profiles.'),
-//    '#description' => t('Put each function name on a seperate line. Class methods can be listed as ClassName::methodName.'),
-//    '#default_value' => $config->get('ignored_functions'),
-//  );
 
   $form['toolbar'] = array(
     '#type' => 'fieldset',
@@ -84,6 +66,9 @@ function webprofiler_settings_form($form, &$form_state) {
   return system_settings_form($form);
 }
 
+/**
+ * Form for clearing profile data.
+ */
 function webprofiler_clear_data_form($form, &$form_state) {
   $files = scandir('public://webprofiler_profiles/');
   $file_count = count($files) - 2;
@@ -114,6 +99,9 @@ function webprofiler_clear_data_form($form, &$form_state) {
   return $form;
 }
 
+/**
+ * A submit handler that clears out all of the existing profile data.
+ */
 function webprofiler_clear_data_form_submit($form, &$form_state) {
   $files = scandir('public://webprofiler_profiles/');
   foreach ($files as $file) {

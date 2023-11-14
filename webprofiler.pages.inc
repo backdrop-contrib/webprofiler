@@ -1,5 +1,11 @@
 <?php
+/**
+ * @file Contains functions to display profile data to users of the module.
+ */
 
+/**
+ * A page to display a list of profiles.
+ */
 function webprofiler_list_profiles($form, &$form_state) {
   $params = backdrop_get_query_parameters();
 
@@ -30,16 +36,6 @@ function webprofiler_list_profiles($form, &$form_state) {
     '#value' => t('Reset'),
     '#submit' => array('webprofiler_list_profiles_form_reset_submit'),
   );
-
-//  $form['actions'] = array(
-//    '#type' => 'fieldset',
-//    '#title' => t('Actions'),
-//  );
-//  $form['actions'] = array(
-//    '#type' => 'submit',
-//    '#value' => t('Reset'),
-//  );
-//  $output .= l(t('Delete all'), url(), array('attributes' => array('class' => '')));
 
   // Format the table.
   $table = array(
@@ -90,7 +86,6 @@ function webprofiler_list_profiles($form, &$form_state) {
 
   $results = $query->execute();
 
-
   foreach ($results as $row) {
     $table['rows'][] = array(
       '',
@@ -109,12 +104,15 @@ function webprofiler_list_profiles($form, &$form_state) {
   );
 
   $form['pager'] = array(
-    '#markup' => theme('pager')
+    '#markup' => theme('pager'),
   );
 
   return $form;
 }
 
+/**
+ * A page callback to allow searching for profiles.
+ */
 function webprofiler_list_profiles_form_search_submit($form, &$form_state) {
   $params = backdrop_get_query_parameters();
   if (isset($form_state['values']['path']) && !empty($form_state['values']['path'])) {
@@ -125,10 +123,16 @@ function webprofiler_list_profiles_form_search_submit($form, &$form_state) {
   backdrop_goto('admin/reports/webprofiler/profiles', array('query' => $params));
 }
 
+/**
+ * A page callback to reset filters on the main profile listing.
+ */
 function webprofiler_list_profiles_form_reset_submit($form, &$form_state) {
   backdrop_goto('admin/reports/webprofiler/profiles');
 }
 
+/**
+ * A page to view a summary of a given profile.
+ */
 function webprofiler_profile_view($profile_id) {
   $profile = webprofiler_get_profile($profile_id);
   if (!$profile) {
@@ -186,6 +190,9 @@ function webprofiler_profile_view($profile_id) {
   return $output;
 }
 
+/**
+ * A page to list functions from a given profile.
+ */
 function webprofiler_profile_functions_view($profile_id) {
   $profile = webprofiler_get_profile($profile_id);
   if (!$profile) {
@@ -287,6 +294,7 @@ function webprofiler_profile_functions_view($profile_id) {
  * The menu callback for viewing a list of queries from a profile.
  *
  * @param string $profile_id
+ *   The profile id of the profile that the queries should be loaded from.
  * @return bool|array
  */
 function webprofiler_profile_queries_view($profile_id) {
@@ -312,7 +320,7 @@ function webprofiler_profile_queries_view($profile_id) {
       array(
         'data' => t('Duration'),
         'field' => 'time',
-        'sort' => 'desc'
+        'sort' => 'desc',
       ),
       t('Target'),
     ),
@@ -394,6 +402,9 @@ function webprofiler_profile_queries_view($profile_id) {
   return $output;
 }
 
+/**
+ * A page that displays data about a given function for a given profile.
+ */
 function webprofiler_profile_function_view($profile_id, $function) {
   $function_name = urldecode($function);
   $profile = webprofiler_get_profile($profile_id);
@@ -544,6 +555,9 @@ function webprofiler_profile_function_view($profile_id, $function) {
   return $output;
 }
 
+/**
+ * A page callback to delete a profile.
+ */
 function webprofiler_profile_delete($profile_id) {
   db_delete('webprofiler_profiles')
     ->condition('id', $profile_id)
