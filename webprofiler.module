@@ -74,6 +74,15 @@ function webprofiler_menu() {
     'access arguments' => array('access webprofiler'),
     'weight' => 3,
   );
+  $items['admin/reports/webprofiler/profiles/%/callgraph'] = array(
+    'title' => t('Callgraph'),
+    'page callback' => 'webprofiler_profile_callgraph_view',
+    'page arguments' => array(4),
+    'file' => 'webprofiler.pages.inc',
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('access webprofiler'),
+    'weight' => 4,
+  );
   $items['admin/reports/webprofiler/profiles/%/functions/%'] = array(
     'title' => t('Functions'),
     'page callback' => 'webprofiler_profile_function_view',

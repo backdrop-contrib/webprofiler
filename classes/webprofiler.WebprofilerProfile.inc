@@ -92,7 +92,7 @@ class WebprofilerProfile {
     if (isset($parts[1])) {
       return $parts;
     }
-    return [ '__top__', $parts[0]];
+    return [ 'main()', $parts[0]];
   }
 
   /**
@@ -169,6 +169,24 @@ class WebprofilerProfile {
   /**
    * Gets the total query time for all queries in the profile.
    */
+  public function getTotalFunctionTime() {
+    static $time = NULL;
+
+    if ($time === NULL) {
+      $time = 0;
+      foreach ($this->functions as $function_name => $function) {
+        if ($function_name !== 'main()') {
+          $time += $function['ewt'];
+        }
+      }
+    }
+
+    return $time;
+  }
+
+  /**
+   * Gets the total query time for all queries in the profile.
+   */
   public function getTotalQueryTime() {
     $time = 0;
 
@@ -196,7 +214,7 @@ class WebprofilerProfile {
    *   An integer representing a number of microseconds.
    */
   public static function formatTime($time) {
-    return number_format($time, 2) . ' µs';
+    return number_format($time, 0) . ' µs';
   }
 
   /**

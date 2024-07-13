@@ -3,6 +3,8 @@
  * @file Contains functions to display profile data to users of the module.
  */
 
+define('MICROSECONDS_PER_SECOND', 1000000);
+
 /**
  * A page to display a list of profiles.
  */
@@ -570,4 +572,187 @@ function webprofiler_profile_delete($profile_id) {
 
   // @TODO: fix redirecting after deleting a profile.
   backdrop_goto('admin/reports/webprofiler/profiles');
+}
+
+/**
+ * The menu callback for viewing a visual representation of a profile.
+ *
+ * @param string $profile_id
+ *   The profile id of the profile that the queries should be loaded from.
+ * @return bool|array
+ */
+function webprofiler_profile_callgraph_view($profile_id) {
+  $profile = webprofiler_get_profile($profile_id);
+  if (!$profile) {
+    return FALSE;
+  }
+  backdrop_set_title('Callgraph for ' .$profile->page['path']);
+
+  backdrop_add_css(backdrop_get_path('module', 'webprofiler') . '/css/webprofiler.callgraph.css');
+
+  backdrop_add_js('https://cdn.jsdelivr.net/npm/d3@7');
+  backdrop_add_js('https://dagrejs.github.io/project/dagre-d3/latest/dagre-d3.js');
+  backdrop_add_js(backdrop_get_path('module', 'webprofiler') . '/js/webprofiler.callgraph.js');
+
+  $settings = [
+    'total_time' => $profile->getTotalFunctionTime(),
+    'nodes' => [],
+    'groups' => [],
+    'links' => [],
+  ];
+  $names = [];
+  foreach ($profile->functions as $function_name => $function_data) {
+    $settings['total_time'] += $function_data['ewt'];
+    if ($function_data['wt'] * 50 >= $profile->getTotalFunctionTime()) {
+      $settings['nodes'][] = [
+        'name' => $function_name,
+        'type' => 'function',
+        'time' => $function_data['wt'],
+        'count' => $function_data['ct'],
+      ];
+      $names[$function_name] = $function_name;
+
+      if (str_contains($function_name, '::')) {
+        $class = explode('::', $function_name)[0];
+        $settings['groups'][] = [
+          'class' => $class,
+          'function' => $function_name,
+        ];
+      }
+    }
+  }
+
+  $group_names = [];
+  foreach ($settings['groups'] as $group) {
+    if (!isset($group_names[$group['class']])) {
+      $settings['nodes'][] = [
+        'name' => $group['class'],
+        'type' => 'group',
+      ];
+      $group_names[$group['class']] = $group['class'];
+    }
+  }
+
+  foreach ($profile->children as $function_name => $children) {
+    foreach ($children as $child_name => $child_data) {
+      if (in_array($function_name, $names)) {
+        if (in_array($child_name, $names)) {
+          if ($child_name !== 'main()') {
+            $settings['links'][] = [
+              'from' => $function_name,
+              'to' => $child_name,
+              'time' => $child_data['wt'],
+              'count' => $child_data['ct'],
+            ];
+          }
+        }
+      }
+    }
+  }
+
+  $processed_queries = [];
+  foreach ($profile->queries as $query => $query_data) {
+    $query_string = preg_replace('/\s+/', ' ', $query_data['query']);
+
+    $parse = _webprofiler_parse_query($query_string);
+    $query_name = $parse['type'] . ' ' . $parse['table'];
+
+    if (!isset($processed_queries[$query_name])) {
+      $processed_queries[$query_name] = [
+        'time' => 0,
+        'count' => 0,
+        'callers' => [],
+      ];
+    }
+    $processed_queries[$query_name]['time'] += $query_data['time'];
+    $processed_queries[$query_name]['count']++;
+
+    if (!empty($query_data['caller']['class'])) {
+      $caller = $query_data['caller']['class'] . '::' . $query_data['caller']['function'];
+    }
+    else {
+      $caller = $query_data['caller']['function'];
+    }
+    if (!isset($caller, $processed_queries[$query_name]['callers'])) {
+      $processed_queries[$query_name]['callers'][$caller] = 0;
+    }
+    $processed_queries[$query_name]['callers'][$caller]++;
+  }
+
+  foreach ($processed_queries as $query_name => $query_data) {
+    if (!empty(array_intersect(array_keys($query_data['callers']), $names))) {
+      $settings['nodes'][] = [
+        'name' => $query_name,
+        'type' => 'query',
+        'time' => round($query_data['time'] * MICROSECONDS_PER_SECOND, 0),
+        'count' => $query_data['count'],
+      ];
+      foreach ($query_data['callers'] as $caller_name => $caller_count) {
+        if (in_array($caller_name, $names)) {
+          $settings['links'][] = [
+            'from' => $caller_name,
+            'to' => $query_name,
+            'count' => $caller_count,
+          ];
+        }
+      }
+
+    }
+  }
+
+  backdrop_add_js(['webprofiler' => $settings], 'setting');
+
+  $output = [
+    'form' => backdrop_get_form('webprofiler_callgraph_form', $profile),
+    'callgraph' => [
+      '#markup' => '<div id="callgraph"></div>',
+    ],
+  ];
+  return $output;
+}
+
+/**
+ * @todo Add form to adjust what is shown.
+ */
+function webprofiler_callgraph_form($form, &$form_state, $profile) {}
+
+/**
+ * Helper function to find the type of query and the table it is being run on.
+ */
+function _webprofiler_parse_query($query) {
+  $parts = explode(' ', $query);
+  $processed = [
+    'type' => '',
+    'table' => '',
+  ];
+  $table_next = FALSE;
+
+  foreach ($parts as $part) {
+    if ($table_next) {
+      $processed['table'] = trim($part, '`');
+    }
+
+    if (!empty($processed['type']) && !empty($processed['table'])) {
+      break;
+    }
+
+    switch (strtolower($part)) {
+      case 'update':
+        $table_next = TRUE;
+
+      case 'select':
+      case 'insert':
+      case 'delete':
+
+        $processed['type'] = $part;
+        break;
+
+      case 'from':
+      case 'into':
+        $table_next = TRUE;
+        break;
+    }
+  }
+
+  return $processed;
 }
